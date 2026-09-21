@@ -45,9 +45,9 @@ correos_empleados = {
     "Arelett": "neilfloresescobedo5@gmail.com"
 }
 def enviar_correo_asistencia(nombre, correo_destino, df_empleado):
-    # Credenciales del remitente (Recursos Humanos)
-    correo_rh = "floresneil070@gmail.com"
-    password = "majk jluc nonh rrsb" # Más abajo te explico cómo sacar esta contraseña
+    # Conectar de forma segura a la bóveda de Streamlit Cloud
+    correo_rh = st.secrets["correo_rh"]
+    password = st.secrets["password_correo"]
     
     mensaje = MIMEMultipart()
     mensaje['From'] = correo_rh
@@ -77,7 +77,7 @@ def enviar_correo_asistencia(nombre, correo_destino, df_empleado):
             servidor.login(correo_rh, password)
             servidor.send_message(mensaje)
         return True
-    except Exception as e:
+    except smtplib.SMTPException as e:
         return False
 
 # ==========================================
