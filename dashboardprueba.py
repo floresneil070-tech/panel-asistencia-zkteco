@@ -13,19 +13,18 @@ st.title("📊 Generador Automático de Reporte de Asistencia")
 # ==========================================
 # REGLAS DE NEGOCIO Y COLORES
 # ==========================================
-def clasificar_asistencia(hora_entrada):
-    if pd.isna(hora_entrada):
-        return "Falta Registro"
+def clasificar_asistencia(hora):
+    # Convertimos a string por seguridad para la comparación
+    hora_str = str(hora).strip()
     
-    limite_puntual = time(9, 15)    # Cualquier hora hasta las 9:15 es Puntual
-    limite_retardo = time(10, 0)    # De 9:16 a 10:00 es Retardo
-    
-    if hora_entrada <= limite_puntual:
-        return "Puntual"
-    elif hora_entrada <= limite_retardo:
-        return "Retardo"
+    # Comparamos usando el formato de reloj de 24 horas (HH:MM:SS)
+    if hora_str <= "09:15:59":
+        return "Puntual ✅"
+    elif hora_str <= "10:00:59":
+        return "Retardo 🟡"
     else:
-        return "Falta" # Asigné las 10:00 AM como límite para que se considere Falta
+        # Si llega después de las 10:00 AM pero SÍ checó, es un retardo mayor, NO una falta.
+        return "Retardo Mayor 🔴"
 def colorear_estatus(val):
     """Asigna colores estilo semáforo a la celda dependiendo del texto."""
     colores = {
