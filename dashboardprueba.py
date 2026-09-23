@@ -14,17 +14,19 @@ st.title("📊 Generador Automático de Reporte de Asistencia")
 # REGLAS DE NEGOCIO Y COLORES
 # ==========================================
 def clasificar_asistencia(hora):
-    # Convertimos a string por seguridad para la comparación
+    # 1. Si la celda está vacía o no existe registro de entrada, es Falta porque no llegó
+    if pd.isna(hora) or str(hora).strip() == "" or str(hora).strip() == "nan":
+        return "Falta 🔴"
+    
     hora_str = str(hora).strip()
     
-    # Comparamos usando el formato de reloj de 24 horas (HH:MM:SS)
+    # 2. Rango de llegada puntual
     if hora_str <= "09:15:59":
         return "Puntual ✅"
-    elif hora_str <= "10:00:59":
-        return "Retardo 🟡"
+        
+    # 3. Cualquier registro después de las 9:15 es retardo (quitamos el límite de las 10 AM)
     else:
-        # Si llega después de las 10:00 AM pero SÍ checó, es un retardo mayor, NO una falta.
-        return "Retardo Mayor 🔴"
+        return "Retardo 🟡"
 def colorear_estatus(val):
     """Asigna colores estilo semáforo a la celda dependiendo del texto."""
     colores = {
