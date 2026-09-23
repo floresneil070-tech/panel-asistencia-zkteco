@@ -42,19 +42,30 @@ def colorear_estatus(val):
 # ==========================================
 # Diccionario de empleados (Asegúrate de que el nombre coincida EXACTAMENTE con el de ZKTeco)
 correos_empleados = {
-    "Arelett": "neilfloresescobedo5@gmail.com"
-}
+    "abel":"floresneil070@gmail.com"
+  
+    }
 def enviar_correo_asistencia(nombre, correo_destino, df_empleado):
-    # Conectar de forma segura a la bóveda de Streamlit Cloud
     correo_rh = st.secrets["correo_rh"]
     password = st.secrets["password_correo"]
     
     mensaje = MIMEMultipart()
     mensaje['From'] = correo_rh
     mensaje['To'] = correo_destino
-    mensaje['Subject'] = f"Registro de Asistencia Mensual - {nombre}"
+    mensaje['Subject'] = f"Reporte de Asistencia y Alertas - {nombre}"
     
-    # Convertir la tabla del empleado a formato HTML para el correo
+    # Contar si hay registros incompletos para generar una alerta
+    olvidos = (df_empleado['Estatus'] == 'Registro Incompleto ⚠️').sum()
+    
+    alerta_texto = ""
+    if olvidos > 0:
+        alerta_texto = f"""
+        <div style="background-color: #ffcccc; padding: 10px; border-left: 5px solid red; margin-bottom: 15px;">
+            <strong style="color: red;">⚠️ ATENCIÓN:</strong> Tienes <b>{olvidos} día(s)</b> donde olvidaste registrar tu entrada o salida (marcados como Registro Incompleto). 
+            Si no los justificas en Recursos Humanos, podrían considerarse como falta.
+        </div>
+        """
+    
     columnas = ['Fecha', 'Hora Entrada', 'Hora Salida', 'Estatus']
     tabla_html = df_empleado[columnas].to_html(index=False, justify='center')
     
@@ -62,15 +73,20 @@ def enviar_correo_asistencia(nombre, correo_destino, df_empleado):
     <html>
       <body style="font-family: Arial, sans-serif; color: #333;">
         <h3>Hola {nombre},</h3>
-        <p>Adjunto encontrarás tu registro de entradas y salidas.</p>
+        <p>Adjunto encontrarás tu reporte completo de asistencias.</p>
+        
+        {alerta_texto}
+        
+        <p>Por favor, revisa la columna <b>Estatus</b> en la siguiente tabla:</p>
         {tabla_html}
-        <p>Si notas alguna anomalía, favor de contactar a Recursos Humanos.</p>
+        
+        <br>
+        <p>Cualquier duda, favor de contactar a Recursos Humanos.</p>
       </body>
     </html>
     """
     mensaje.attach(MIMEText(cuerpo, 'html'))
     
-    # Conexión al servidor de Gmail y envío
     try:
         with smtplib.SMTP('smtp.gmail.com', 587) as servidor:
             servidor.starttls()
@@ -79,7 +95,6 @@ def enviar_correo_asistencia(nombre, correo_destino, df_empleado):
         return True
     except smtplib.SMTPException as e:
         return False
-
 # ==========================================
 # MOTOR DEL DASHBOARD
 # ==========================================
@@ -134,10 +149,13 @@ if archivo_subido is not None:
         df_resumen = df_limpio.groupby(['Fecha', 'Departamento', 'Nombre'])['Hora'].agg(['min', 'max']).reset_index()
         df_resumen.columns = ['Fecha', 'Departamento', 'Nombre', 'Hora Entrada', 'Hora Salida']
         df_resumen.loc[df_resumen['Hora Entrada'] == df_resumen['Hora Salida'], 'Hora Salida'] = None
-        #########3
-        # 3. Aplicar Lógica de Negocio (Clasificación)
         # 3. Aplicar Lógica de Negocio (Clasificación Diaria)
         df_resumen['Estatus'] = df_resumen['Hora Entrada'].apply(clasificar_asistencia)
+
+        # Si la hora de salida está vacía, el trabajador olvidó checar
+        mascara_incompleta = df_resumen['Hora Salida'].isna()
+        df_resumen.loc[mascara_incompleta, 'Estatus'] = 'Registro Incompleto ⚠️'
+        df_resumen.loc[mascara_incompleta, 'Horas Diarias'] = 0  # No podemos calcular sus horas ese día
         
         # --- NUEVO: AGRUPACIÓN TOTAL POR EMPLEADO ---
         
@@ -158,6 +176,8 @@ if archivo_subido is not None:
         
         # E. Agregar las columnas para captura manual
         df_final['Observaciones'] = ""
+
+       
 # ==========================================
     # 4. INTERFAZ VISUAL: REGISTRO GENERAL
     # ==========================================
