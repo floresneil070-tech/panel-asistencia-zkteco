@@ -42,7 +42,7 @@ def colorear_estatus(val):
 # ==========================================
 # Diccionario de empleados (Asegúrate de que el nombre coincida EXACTAMENTE con el de ZKTeco)
 correos_empleados = {
-    "abel":"floresneil070@gmail.com"
+    "Abel":"floresneil070@gmail.com"
   
     }
 def enviar_correo_asistencia(nombre, correo_destino, df_empleado):
