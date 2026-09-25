@@ -146,61 +146,85 @@ if archivo_subido is not None:
         df_limpio['Hora'] = pd.to_datetime(df_limpio['Hora'], format='%H:%M').dt.time
         
         # 2. Agrupación para sacar Entrada y Salida
-       # 2. Agrupación para sacar Entrada y Salida de lo que SÍ existe
+       # --- TRANSFORMACIÓN (Entradas y Salidas Diarias) ---
         df_inicial = df_limpio.groupby(['Fecha', 'Departamento', 'Nombre'])['Hora'].agg(['min', 'max']).reset_index()
         df_inicial.columns = ['Fecha', 'Departamento', 'Nombre', 'Hora Entrada', 'Hora Salida']
 
-        # === NUEVO: INYECTAR DÍAS AUSENTES (FALTAS REALES) ===
-        # Obtener todas las fechas del archivo y todos los empleados
+        # === 1. INYECTAR CALENDARIO OBLIGATORIO (SOLO L-V) ===
         fechas_unicas = df_inicial['Fecha'].dropna().unique()
         empleados_unicos = df_inicial[['Departamento', 'Nombre']].drop_duplicates()
         
-        # Crear un calendario completo (todas las fechas x todos los empleados)
         df_calendario = pd.DataFrame({'Fecha': fechas_unicas}).merge(empleados_unicos, how='cross')
+        df_calendario['dia_semana'] = pd.to_datetime(df_calendario['Fecha']).dt.weekday
         
-        # Filtrar domingos para no marcarlos como falta (0=Lunes, 6=Domingo)
-        df_calendario['es_domingo'] = pd.to_datetime(df_calendario['Fecha']).dt.weekday == 6
-        df_calendario = df_calendario[~df_calendario['es_domingo']].drop(columns=['es_domingo'])
+        # Exigimos asistencia SOLO de Lunes(0) a Viernes(4)
+        df_calendario = df_calendario[df_calendario['dia_semana'] < 5].drop(columns=['dia_semana'])
 
-        # Unir el calendario completo con los datos reales (esto genera los huecos de las faltas)
-        df_resumen = df_calendario.merge(df_inicial, on=['Fecha', 'Departamento', 'Nombre'], how='left')
-        # =======================================================
-
-        # Limpiar salidas vacías (cuando checó solo una vez)
+        # OUTER JOIN: Cruza el calendario L-V con los registros reales (para no perder las horas del sábado)
+        df_resumen = pd.merge(df_calendario, df_inicial, on=['Fecha', 'Departamento', 'Nombre'], how='outer')
+        
+        # Limpiar filas vacías si alguien no fue en fin de semana (no es falta)
+        df_resumen['dia_semana'] = pd.to_datetime(df_resumen['Fecha']).dt.weekday
+        mascara_borrar = df_resumen['Hora Entrada'].isna() & (df_resumen['dia_semana'] >= 5)
+        df_resumen = df_resumen[~mascara_borrar]
+        
+        # === 2. LÓGICA DE ESTATUS Y CÁLCULO DE HORAS ===
         df_resumen.loc[df_resumen['Hora Entrada'] == df_resumen['Hora Salida'], 'Hora Salida'] = None
-        
-        # 3. Aplicar Lógica de Negocio (Clasificación Diaria)
         df_resumen['Estatus'] = df_resumen['Hora Entrada'].apply(clasificar_asistencia)
 
-        # Si SÍ fue (tiene entrada) pero la salida está vacía, olvidó checar
         mascara_incompleta = df_resumen['Hora Entrada'].notna() & df_resumen['Hora Salida'].isna()
         df_resumen.loc[mascara_incompleta, 'Estatus'] = 'Registro Incompleto ⚠️'
-        df_resumen.loc[mascara_incompleta, 'Horas Diarias'] = 0  # No podemos calcular sus horas ese día
 
-        # Limpiar visualmente las celdas vacías para la tabla
+        # Calcular horas en formato decimal restando salida de entrada
+        df_resumen['Horas Diarias'] = 0.0
+        mascara_validas = df_resumen['Hora Entrada'].notna() & df_resumen['Hora Salida'].notna()
+        df_resumen.loc[mascara_validas, 'Entrada_dt'] = pd.to_datetime(df_resumen.loc[mascara_validas, 'Fecha'].astype(str) + ' ' + df_resumen.loc[mascara_validas, 'Hora Entrada'].astype(str))
+        df_resumen.loc[mascara_validas, 'Salida_dt'] = pd.to_datetime(df_resumen.loc[mascara_validas, 'Fecha'].astype(str) + ' ' + df_resumen.loc[mascara_validas, 'Hora Salida'].astype(str))
+        df_resumen.loc[mascara_validas, 'Horas Diarias'] = (df_resumen.loc[mascara_validas, 'Salida_dt'] - df_resumen.loc[mascara_validas, 'Entrada_dt']).dt.total_seconds() / 3600
+        
+        # Segmentar las horas del mes
+        df_resumen['Horas L-V'] = df_resumen.apply(lambda row: row['Horas Diarias'] if row['dia_semana'] < 5 else 0, axis=1)
+        df_resumen['Horas Sábado'] = df_resumen.apply(lambda row: row['Horas Diarias'] if row['dia_semana'] == 5 else 0, axis=1)
+
         df_resumen['Hora Entrada'] = df_resumen['Hora Entrada'].fillna('Sin registro')
         df_resumen['Hora Salida'] = df_resumen['Hora Salida'].fillna('Sin registro')
+
+        # --- 3. AGRUPACIÓN TOTAL POR EMPLEADO (NÓMINA) ---
         
-        # --- NUEVO: AGRUPACIÓN TOTAL POR EMPLEADO ---
+        # A. Contar Días Asistidos (Omitiendo los sábados y los días con falta)
+        asistencias_lv = df_resumen[(df_resumen['Estatus'] != 'Falta 🔴') & (df_resumen['dia_semana'] < 5)]
+        df_dias = asistencias_lv.groupby(['Departamento', 'Nombre'])['Fecha'].count().reset_index()
+        df_dias.rename(columns={'Fecha': 'Días Asistidos (L-V)'}, inplace=True)
         
-        # A. Contar cuántos días en total asistió cada empleado
-        df_dias = df_resumen.groupby(['Departamento', 'Nombre'])['Fecha'].count().reset_index()
-        df_dias.rename(columns={'Fecha': 'Días Asistidos'}, inplace=True)
-        
-        # B. Contar cuántas veces tuvo cada estatus (Retardo, Falta, Puntual)
+        # B. Contar incidencias (Faltas, Retardos, etc.)
         df_estatus = df_resumen.groupby(['Departamento', 'Nombre', 'Estatus']).size().unstack(fill_value=0).reset_index()
-        
-        # C. Asegurar que las columnas existan (por si en un mes nadie tiene faltas)
-        for col in ['Puntual', 'Puntualidad al ras', 'Retardo', 'Falta']:
+        for col in ['Puntual ✅', 'Retardo 🟡', 'Falta 🔴', 'Registro Incompleto ⚠️']:
             if col not in df_estatus.columns:
                 df_estatus[col] = 0
                 
-        # D. Unir todo en la tabla final
-        df_final = pd.merge(df_dias, df_estatus, on=['Departamento', 'Nombre'])
+        # C. Sumar totales de horas del mes por empleado
+        df_horas = df_resumen.groupby(['Departamento', 'Nombre'])[['Horas L-V', 'Horas Sábado']].sum().reset_index()
         
-        # E. Agregar las columnas para captura manual
+        # D. Consolidar todas las tablas
+        df_final = pd.merge(df_dias, df_estatus, on=['Departamento', 'Nombre'], how='right').fillna({'Días Asistidos (L-V)': 0})
+        df_final = pd.merge(df_final, df_horas, on=['Departamento', 'Nombre'])
+        
+        # E. Regla de Negocio: Horas Pendientes (Base 8 horas diarias L-V)
+        df_final['Días Esperados (Mes)'] = df_final['Días Asistidos (L-V)'] + df_final['Falta 🔴']
+        df_final['Horas Pendientes L-V'] = (df_final['Días Esperados (Mes)'] * 8) - df_final['Horas L-V']
+        
+        # Si no deben nada, se queda en 0. Redondeamos todo a 2 decimales.
+        df_final['Horas Pendientes L-V'] = df_final['Horas Pendientes L-V'].apply(lambda x: round(x, 2) if x > 0 else 0)
+        df_final['Horas Sábado (Reposición)'] = df_final['Horas Sábado'].round(2)
+        
+        # Organizar visualmente la tabla final para Recursos Humanos
+        columnas_finales = [
+            'Departamento', 'Nombre', 'Días Asistidos (L-V)', 'Falta 🔴', 
+            'Puntual ✅', 'Retardo 🟡', 'Registro Incompleto ⚠️', 
+            'Horas Pendientes L-V', 'Horas Sábado (Reposición)'
+        ]
+        df_final = df_final[columnas_finales]
         df_final['Observaciones'] = ""
-
        
 # ==========================================
     # 4. INTERFAZ VISUAL: REGISTRO GENERAL
