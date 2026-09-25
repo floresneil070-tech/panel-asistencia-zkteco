@@ -245,7 +245,7 @@ if archivo_subido is not None:
         # 2. Lista de empleados de Medio Tiempo o Talentos (Jornada de 5 horas)
         # ⚠️ Escribe aquí los nombres EXACTAMENTE como salen en ZKTeco
         medio_tiempo = [
-            'lemimah',
+            'Iemimah',
             'JENIFER',
             'Diana',
             'Neil',
