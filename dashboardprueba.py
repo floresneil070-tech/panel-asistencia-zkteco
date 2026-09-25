@@ -42,10 +42,7 @@ def colorear_estatus(val):
 #   PARA ENVIAR A EMPLEDOS POR CORREO
 # ==========================================
 # Diccionario de empleados (Asegúrate de que el nombre coincida EXACTAMENTE con el de ZKTeco)
-correos_empleados = {
-    "Abel":"floresneil070@gmail.com"
-  
-    }
+
 def enviar_correo_asistencia(nombre, correo_destino, df_empleado):
     correo_rh = st.secrets["correo_rh"]
     password = st.secrets["password_correo"]
@@ -98,11 +95,30 @@ def enviar_correo_asistencia(nombre, correo_destino, df_empleado):
 # ==========================================
 # MOTOR DEL DASHBOARD
 # ==========================================
+# ==========================================
+# MOTOR DEL DASHBOARD
+# ==========================================
 st.sidebar.header("⚙️ Panel de Control")
+
+# 1er Botón: Reporte ZKTeco
 archivo_subido = st.sidebar.file_uploader("Sube el reporte ZKTeco (Excel)", type=["xls", "xlsx"])
 
+# 2do Botón: Directorio de Correos
+archivo_correos = st.sidebar.file_uploader("Sube el Directorio de Correos (Excel)", type=["xls", "xlsx"])
+
+# Leer el Excel de correos y convertirlo en diccionario si el usuario ya lo subió
+correos_empleados = {}
+if archivo_correos is not None:
+    df_correos = pd.read_excel(archivo_correos)
+    # Convierte las dos columnas del Excel (Nombre y Correo) en un diccionario automático
+    correos_empleados = dict(zip(df_correos['Nombre'], df_correos['Correo']))
+    st.sidebar.success(f"¡Directorio cargado! {len(correos_empleados)} empleados listos para notificación.")
+else:
+    st.sidebar.info("Sube el directorio de correos para habilitar el botón de envío.")
+
 if archivo_subido is not None:
-    st.sidebar.success("¡Archivo cargado! Procesando datos...")
+    st.sidebar.success("¡Archivo ZKTeco cargado! Procesando datos...")
+    # ... (AQUÍ CONTINÚA TU CÓDIGO NORMAL CON EL WITH ST.SPINNER...)
     
     with st.spinner('Aplicando reglas lógicas y colores...'):
         # 1. Extracción de datos en crudo (Tu código ETL)
