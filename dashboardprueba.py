@@ -238,21 +238,24 @@ if archivo_subido is not None:
         df_final = pd.merge(df_final, df_horas, on=['Departamento', 'Nombre'])
         
        # E. Regla de Negocio: Horas Pendientes (Jornadas Dinámicas por Nombre)
+      
+        
        # E. Regla de Negocio: Horas Pendientes (Jornadas Dinámicas)
         
-        # 1. Por defecto, jornada completa de 8 horas para todos (40 hrs semanales)
-        df_final['Horas Base'] = 8
+        # 1. Por defecto, jornada completa en formato decimal
+        df_final['Horas Base'] = 8.0
         
-        # 2. Lista de Medio Tiempo / Talentos (5 horas diarias = 25 hrs semanales)
+        # 2. Lista de Medio Tiempo / Talentos
         medio_tiempo = [
             'JENIFER',
             'Eunice',
             'Abel',
             'Iemimah'
         ]
-        df_final.loc[df_final['Nombre'].isin(medio_tiempo), 'Horas Base'] = 5
+        # Asignamos 5.0 en lugar de 5 entero
+        df_final.loc[df_final['Nombre'].isin(medio_tiempo), 'Horas Base'] = 5.0
 
-        # 3. Caso Especial: Arelett (7.2 horas diarias = 36 hrs semanales)
+        # 3. Caso Especial: Arelett (Ya no marcará error porque la columna ya es decimal)
         df_final.loc[df_final['Nombre'] == 'Arelett', 'Horas Base'] = 7.2
 
         # 4. Matemáticas de horas pendientes
@@ -260,9 +263,6 @@ if archivo_subido is not None:
         df_final['Horas Pendientes L-V'] = (df_final['Días Esperados (Mes)'] * df_final['Horas Base']) - df_final['Horas L-V']
         
         # Limpiar números negativos
-        df_final['Horas Pendientes L-V'] = df_final['Horas Pendientes L-V'].apply(lambda x: round(x, 2) if x > 0 else 0)
-        df_final['Horas Sábado (Reposición)'] = df_final['Horas Sábado'].round(2)
-        # Si no deben nada, se queda en 0. Redondeamos todo a 2 decimales.
         df_final['Horas Pendientes L-V'] = df_final['Horas Pendientes L-V'].apply(lambda x: round(x, 2) if x > 0 else 0)
         df_final['Horas Sábado (Reposición)'] = df_final['Horas Sábado'].round(2)
         
