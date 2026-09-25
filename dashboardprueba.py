@@ -238,10 +238,6 @@ if archivo_subido is not None:
         df_final = pd.merge(df_final, df_horas, on=['Departamento', 'Nombre'])
         
        # E. Regla de Negocio: Horas Pendientes (Jornadas Dinámicas por Nombre)
-      
-        
-       # E. Regla de Negocio: Horas Pendientes (Jornadas Dinámicas)
-        
         # 1. Por defecto, jornada completa en formato decimal
         df_final['Horas Base'] = 8.0
         
@@ -262,19 +258,29 @@ if archivo_subido is not None:
         df_final['Días Esperados (Mes)'] = df_final['Días Asistidos (L-V)'] + df_final['Falta 🔴']
         df_final['Horas Pendientes L-V'] = (df_final['Días Esperados (Mes)'] * df_final['Horas Base']) - df_final['Horas L-V']
         
-        # Limpiar números negativos
+        # Limpiar números negativos 
         df_final['Horas Pendientes L-V'] = df_final['Horas Pendientes L-V'].apply(lambda x: round(x, 2) if x > 0 else 0)
         df_final['Horas Sábado (Reposición)'] = df_final['Horas Sábado'].round(2)
-        
+    
         # Organizar visualmente la tabla final para Recursos Humanos
         columnas_finales = [
             'Departamento', 'Nombre', 'Días Asistidos (Total)', 'Días Asistidos (L-V)', 'Falta 🔴', 
             'Puntual ✅', 'Retardo 🟡', 'Registro Incompleto ⚠️', 
             'Horas Pendientes L-V', 'Horas Sábado (Reposición)'
         ]
+        # Redondear las horas trabajadas para que se vean limpias
+        df_final['Horas L-V'] = df_final['Horas L-V'].round(2)
+
+        # Organizar visualmente la tabla final para Recursos Humanos
+        columnas_finales = [
+            'Departamento', 'Nombre', 'Días Asistidos (Total)', 'Días Asistidos (L-V)', 'Falta 🔴', 
+            'Puntual ✅', 'Retardo 🟡', 'Registro Incompleto ⚠️', 
+            'Horas L-V',  # <--- AQUÍ REGRESAMOS LA COLUMNA DE HORAS TRABAJADAS
+            'Horas Pendientes L-V', 'Horas Sábado (Reposición)'
+        ]
         df_final = df_final[columnas_finales]
         df_final['Observaciones'] = ""
-       
+      
 # ==========================================
     # 4. INTERFAZ VISUAL: REGISTRO GENERAL
     # ==========================================
