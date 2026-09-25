@@ -238,29 +238,28 @@ if archivo_subido is not None:
         df_final = pd.merge(df_final, df_horas, on=['Departamento', 'Nombre'])
         
        # E. Regla de Negocio: Horas Pendientes (Jornadas Dinámicas por Nombre)
+       # E. Regla de Negocio: Horas Pendientes (Jornadas Dinámicas)
         
-        # 1. Por defecto, jornada completa de 8 horas para todos
+        # 1. Por defecto, jornada completa de 8 horas para todos (40 hrs semanales)
         df_final['Horas Base'] = 8
         
-        # 2. Lista de empleados de Medio Tiempo o Talentos (Jornada de 5 horas)
-        # ⚠️ Escribe aquí los nombres EXACTAMENTE como salen en ZKTeco
+        # 2. Lista de Medio Tiempo / Talentos (5 horas diarias = 25 hrs semanales)
         medio_tiempo = [
-            'Iemimah',
             'JENIFER',
-            'Diana',
-            'Neil',
-            'Sheila',
-            'JuanPablo'  # Añade más separándolos con comas y entre com
+            'Eunice',
+            'Abel',
+            'Iemimah'
         ]
-        
-        # 3. Aplicar las 5 horas solo a los que están en la lista
         df_final.loc[df_final['Nombre'].isin(medio_tiempo), 'Horas Base'] = 5
+
+        # 3. Caso Especial: Arelett (7.2 horas diarias = 36 hrs semanales)
+        df_final.loc[df_final['Nombre'] == 'Arelett', 'Horas Base'] = 7.2
 
         # 4. Matemáticas de horas pendientes
         df_final['Días Esperados (Mes)'] = df_final['Días Asistidos (L-V)'] + df_final['Falta 🔴']
         df_final['Horas Pendientes L-V'] = (df_final['Días Esperados (Mes)'] * df_final['Horas Base']) - df_final['Horas L-V']
         
-        # Limpiar números negativos (si trabajaron de más, la deuda es 0)
+        # Limpiar números negativos
         df_final['Horas Pendientes L-V'] = df_final['Horas Pendientes L-V'].apply(lambda x: round(x, 2) if x > 0 else 0)
         df_final['Horas Sábado (Reposición)'] = df_final['Horas Sábado'].round(2)
         # Si no deben nada, se queda en 0. Redondeamos todo a 2 decimales.
