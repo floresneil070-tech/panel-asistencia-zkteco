@@ -62,8 +62,7 @@ def enviar_correo_asistencia(nombre, correo_destino, df_empleado):
     if olvidos > 0:
         alerta_texto = f"""
         <div style="background-color: #ffcccc; padding: 10px; border-left: 5px solid red; margin-bottom: 15px;">
-            <strong style="color: red;">⚠️ ATENCIÓN:</strong> Tienes <b>{olvidos} día(s)</b> donde olvidaste registrar tu entrada o salida (marcados como Registro Incompleto). 
-            Si no los justificas en Recursos Humanos, podrían considerarse como falta.
+            <strong style="color: red;">⚠️ ATENCIÓN:</strong> Tienes <b>{olvidos} día(s)</b> donde olvidaste registrar tu entrada o salida (marcados como Registro Incompleto).
         </div>
         """
     
@@ -147,16 +146,40 @@ if archivo_subido is not None:
         df_limpio['Hora'] = pd.to_datetime(df_limpio['Hora'], format='%H:%M').dt.time
         
         # 2. Agrupación para sacar Entrada y Salida
-        df_resumen = df_limpio.groupby(['Fecha', 'Departamento', 'Nombre'])['Hora'].agg(['min', 'max']).reset_index()
-        df_resumen.columns = ['Fecha', 'Departamento', 'Nombre', 'Hora Entrada', 'Hora Salida']
+       # 2. Agrupación para sacar Entrada y Salida de lo que SÍ existe
+        df_inicial = df_limpio.groupby(['Fecha', 'Departamento', 'Nombre'])['Hora'].agg(['min', 'max']).reset_index()
+        df_inicial.columns = ['Fecha', 'Departamento', 'Nombre', 'Hora Entrada', 'Hora Salida']
+
+        # === NUEVO: INYECTAR DÍAS AUSENTES (FALTAS REALES) ===
+        # Obtener todas las fechas del archivo y todos los empleados
+        fechas_unicas = df_inicial['Fecha'].dropna().unique()
+        empleados_unicos = df_inicial[['Departamento', 'Nombre']].drop_duplicates()
+        
+        # Crear un calendario completo (todas las fechas x todos los empleados)
+        df_calendario = pd.DataFrame({'Fecha': fechas_unicas}).merge(empleados_unicos, how='cross')
+        
+        # Filtrar domingos para no marcarlos como falta (0=Lunes, 6=Domingo)
+        df_calendario['es_domingo'] = pd.to_datetime(df_calendario['Fecha']).dt.weekday == 6
+        df_calendario = df_calendario[~df_calendario['es_domingo']].drop(columns=['es_domingo'])
+
+        # Unir el calendario completo con los datos reales (esto genera los huecos de las faltas)
+        df_resumen = df_calendario.merge(df_inicial, on=['Fecha', 'Departamento', 'Nombre'], how='left')
+        # =======================================================
+
+        # Limpiar salidas vacías (cuando checó solo una vez)
         df_resumen.loc[df_resumen['Hora Entrada'] == df_resumen['Hora Salida'], 'Hora Salida'] = None
+        
         # 3. Aplicar Lógica de Negocio (Clasificación Diaria)
         df_resumen['Estatus'] = df_resumen['Hora Entrada'].apply(clasificar_asistencia)
 
-        # Si la hora de salida está vacía, el trabajador olvidó checar
-        mascara_incompleta = df_resumen['Hora Salida'].isna()
+        # Si SÍ fue (tiene entrada) pero la salida está vacía, olvidó checar
+        mascara_incompleta = df_resumen['Hora Entrada'].notna() & df_resumen['Hora Salida'].isna()
         df_resumen.loc[mascara_incompleta, 'Estatus'] = 'Registro Incompleto ⚠️'
         df_resumen.loc[mascara_incompleta, 'Horas Diarias'] = 0  # No podemos calcular sus horas ese día
+
+        # Limpiar visualmente las celdas vacías para la tabla
+        df_resumen['Hora Entrada'] = df_resumen['Hora Entrada'].fillna('Sin registro')
+        df_resumen['Hora Salida'] = df_resumen['Hora Salida'].fillna('Sin registro')
         
         # --- NUEVO: AGRUPACIÓN TOTAL POR EMPLEADO ---
         
