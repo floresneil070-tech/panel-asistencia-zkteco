@@ -207,10 +207,21 @@ if archivo_subido is not None:
 
         # --- 3. AGRUPACIÓN TOTAL POR EMPLEADO (NÓMINA) ---
         
-        # A. Contar Días Asistidos (Omitiendo los sábados y los días con falta)
+       # --- 3. AGRUPACIÓN TOTAL POR EMPLEADO (NÓMINA) ---
+        
+        # A. Contar Días Asistidos
+        # 1. Total exacto como lo cuenta ZKTeco (Cualquier día que sí haya ido)
+        asistencias_totales = df_resumen[df_resumen['Estatus'] != 'Falta 🔴']
+        df_dias_total = asistencias_totales.groupby(['Departamento', 'Nombre'])['Fecha'].count().reset_index()
+        df_dias_total.rename(columns={'Fecha': 'Días Asistidos (Total)'}, inplace=True)
+        
+        # 2. Interno para matemáticas (Solo L-V)
         asistencias_lv = df_resumen[(df_resumen['Estatus'] != 'Falta 🔴') & (df_resumen['dia_semana'] < 5)]
-        df_dias = asistencias_lv.groupby(['Departamento', 'Nombre'])['Fecha'].count().reset_index()
-        df_dias.rename(columns={'Fecha': 'Días Asistidos (L-V)'}, inplace=True)
+        df_dias_lv = asistencias_lv.groupby(['Departamento', 'Nombre'])['Fecha'].count().reset_index()
+        df_dias_lv.rename(columns={'Fecha': 'Días Asistidos (L-V)'}, inplace=True)
+        
+        # Unir ambos conteos
+        df_dias = pd.merge(df_dias_total, df_dias_lv, on=['Departamento', 'Nombre'], how='left')
         
         # B. Contar incidencias (Faltas, Retardos, etc.)
         df_estatus = df_resumen.groupby(['Departamento', 'Nombre', 'Estatus']).size().unstack(fill_value=0).reset_index()
@@ -222,7 +233,10 @@ if archivo_subido is not None:
         df_horas = df_resumen.groupby(['Departamento', 'Nombre'])[['Horas L-V', 'Horas Sábado']].sum().reset_index()
         
         # D. Consolidar todas las tablas
-        df_final = pd.merge(df_dias, df_estatus, on=['Departamento', 'Nombre'], how='right').fillna({'Días Asistidos (L-V)': 0})
+        df_final = pd.merge(df_dias, df_estatus, on=['Departamento', 'Nombre'], how='right').fillna({
+            'Días Asistidos (Total)': 0, 
+            'Días Asistidos (L-V)': 0
+        })
         df_final = pd.merge(df_final, df_horas, on=['Departamento', 'Nombre'])
         
         # E. Regla de Negocio: Horas Pendientes (Base 8 horas diarias L-V)
@@ -235,7 +249,7 @@ if archivo_subido is not None:
         
         # Organizar visualmente la tabla final para Recursos Humanos
         columnas_finales = [
-            'Departamento', 'Nombre', 'Días Asistidos (L-V)', 'Falta 🔴', 
+            'Departamento', 'Nombre', 'Días Asistidos (Total)', 'Días Asistidos (L-V)', 'Falta 🔴', 
             'Puntual ✅', 'Retardo 🟡', 'Registro Incompleto ⚠️', 
             'Horas Pendientes L-V', 'Horas Sábado (Reposición)'
         ]
