@@ -242,14 +242,14 @@ if archivo_subido is not None:
         df_final['Horas Base'] = 8.0
         
         # 2. Lista de Medio Tiempo / Talentos
-        medio_tiempo = [
+        media_planta = [
             'JENIFER',
             'Eunice',
             'Abel',
             'Iemimah'
         ]
         # Asignamos 5.0 en lugar de 5 entero
-        df_final.loc[df_final['Nombre'].isin(medio_tiempo), 'Horas Base'] = 5.0
+        df_final.loc[df_final['Nombre'].isin(media_planta), 'Horas Base'] = 5.0
 
         # 3. Caso Especial: Arelett (Ya no marcará error porque la columna ya es decimal)
         df_final.loc[df_final['Nombre'] == 'Arelett', 'Horas Base'] = 7.2
