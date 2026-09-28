@@ -244,7 +244,7 @@ if archivo_subido is not None:
         # 2. Lista de Medio Tiempo / Talentos
         media_planta = [
             'JENIFER',
-            'Eunice',
+            'Diana',
             'Sheila',
             'Iemimah',
             'Neil',
