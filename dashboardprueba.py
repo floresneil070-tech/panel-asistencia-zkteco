@@ -245,8 +245,10 @@ if archivo_subido is not None:
         media_planta = [
             'JENIFER',
             'Eunice',
-            'Abel',
-            'Iemimah'
+            'Sheila',
+            'Iemimah',
+            'Neil',
+            'JuanPablo'
         ]
         # Asignamos 5.0 en lugar de 5 entero
         df_final.loc[df_final['Nombre'].isin(media_planta), 'Horas Base'] = 5.0
