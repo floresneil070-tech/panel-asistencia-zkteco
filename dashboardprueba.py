@@ -194,8 +194,17 @@ if archivo_subido is not None:
         mascara_validas = df_resumen['Hora Entrada'].notna() & df_resumen['Hora Salida'].notna()
         df_resumen.loc[mascara_validas, 'Entrada_dt'] = pd.to_datetime(df_resumen.loc[mascara_validas, 'Fecha'].astype(str) + ' ' + df_resumen.loc[mascara_validas, 'Hora Entrada'].astype(str))
         df_resumen.loc[mascara_validas, 'Salida_dt'] = pd.to_datetime(df_resumen.loc[mascara_validas, 'Fecha'].astype(str) + ' ' + df_resumen.loc[mascara_validas, 'Hora Salida'].astype(str))
+        
+        # 1. Sacamos el tiempo total transcurrido desde que llegaron hasta que se fueron
         df_resumen.loc[mascara_validas, 'Horas Diarias'] = (df_resumen.loc[mascara_validas, 'Salida_dt'] - df_resumen.loc[mascara_validas, 'Entrada_dt']).dt.total_seconds() / 3600
         
+        # === NUEVO: DESCUENTO AUTOMÁTICO DE HORA DE COMIDA ===
+        # Si el tiempo transcurrido es mayor a 6 horas, restamos 1 hora por la comida.
+        # (Los que van de 9 a 6 bajan a 8 hrs. Los de talento de 9 a 2 se quedan en 5 hrs intactas).
+        df_resumen['Horas Diarias'] = df_resumen['Horas Diarias'].apply(lambda x: x - 1.0 if x >= 6.0 else x)
+        
+        # Segmentar las horas del mes (Esto ya lo tenías, déjalo igual)
+        df_resumen['Horas L-V'] = df_resumen.apply(lambda row: row['Horas Diarias'] if row['dia_semana'] < 5 else 0, axis=1)
         # Segmentar las horas del mes
         df_resumen['Horas L-V'] = df_resumen.apply(lambda row: row['Horas Diarias'] if row['dia_semana'] < 5 else 0, axis=1)
         df_resumen['Horas Sábado'] = df_resumen.apply(lambda row: row['Horas Diarias'] if row['dia_semana'] == 5 else 0, axis=1)
@@ -282,6 +291,46 @@ if archivo_subido is not None:
         ]
         df_final = df_final[columnas_finales]
         df_final['Observaciones'] = ""
+
+       # === NUEVO: 4. AGRUPACIÓN SEMANAL ===
+        # Extraemos el número de semana del año (Ej. Semana 35, Semana 36)
+        df_resumen['Semana'] = pd.to_datetime(df_resumen['Fecha']).dt.isocalendar().week
+        
+        # A. Días asistidos por semana (L-V)
+        asistencias_sem = df_resumen[(df_resumen['Estatus'] != 'Falta 🔴') & (df_resumen['dia_semana'] < 5)]
+        df_dias_sem = asistencias_sem.groupby(['Semana', 'Departamento', 'Nombre'])['Fecha'].count().reset_index()
+        df_dias_sem.rename(columns={'Fecha': 'Días Asistidos (L-V)'}, inplace=True)
+        
+        # B. Incidencias por semana
+        df_estatus_sem = df_resumen.groupby(['Semana', 'Departamento', 'Nombre', 'Estatus']).size().unstack(fill_value=0).reset_index()
+        for col in ['Falta 🔴', 'Retardo 🟡', 'Registro Incompleto ⚠️', 'Puntual ✅']:
+            if col not in df_estatus_sem.columns:
+                df_estatus_sem[col] = 0
+                
+        # C. Horas trabajadas por semana
+        df_horas_sem = df_resumen.groupby(['Semana', 'Departamento', 'Nombre'])[['Horas L-V', 'Horas Sábado']].sum().reset_index()
+        
+        # D. Consolidar el DataFrame Semanal
+        df_semanal = pd.merge(df_dias_sem, df_estatus_sem, on=['Semana', 'Departamento', 'Nombre'], how='right').fillna({'Días Asistidos (L-V)': 0})
+        df_semanal = pd.merge(df_semanal, df_horas_sem, on=['Semana', 'Departamento', 'Nombre'])
+        
+        # E. Aplicar las mismas jornadas dinámicas que en el mensual
+        df_semanal['Horas Base'] = 8.0
+        df_semanal.loc[df_semanal['Nombre'].isin(media_planta), 'Horas Base'] = 5.0
+        df_semanal.loc[df_semanal['Nombre'] == 'Arelett', 'Horas Base'] = 7.2
+        
+        df_semanal['Días Esperados'] = df_semanal['Días Asistidos (L-V)'] + df_semanal['Falta 🔴']
+        df_semanal['Horas Pendientes L-V'] = (df_semanal['Días Esperados'] * df_semanal['Horas Base']) - df_semanal['Horas L-V']
+        
+        df_semanal['Horas Pendientes L-V'] = df_semanal['Horas Pendientes L-V'].apply(lambda x: round(x, 2) if x > 0 else 0)
+        df_semanal['Horas L-V'] = df_semanal['Horas L-V'].round(2)
+        df_semanal['Horas Sábado (Reposición)'] = df_semanal['Horas Sábado'].round(2)
+        
+        columnas_sem = [
+            'Semana', 'Departamento', 'Nombre', 'Días Asistidos (L-V)', 'Falta 🔴', 
+            'Retardo 🟡', 'Horas L-V', 'Horas Pendientes L-V', 'Horas Sábado (Reposición)'
+        ]
+        df_semanal = df_semanal[columnas_sem] 
       
 # ==========================================
     # 4. INTERFAZ VISUAL: REGISTRO GENERAL
@@ -328,6 +377,23 @@ if archivo_subido is not None:
         file_name='reporte_nomina_agrupado.csv',
         mime='text/csv',
         key='descarga_nomina' # <--- ESTA LÍNEA SOLUCIONA EL ERROR
+    )
+    st.markdown("---")
+    st.subheader("📅 Desglose Semanal de Nómina")
+    st.write("Auditoría de horas y asistencia separada por semanas del año.")
+    
+    st.dataframe(
+        df_semanal,
+        use_container_width=True,
+        height=400
+    )
+    
+    st.download_button(
+        label="📥 Descargar Reporte Semanal (CSV)",
+        data=df_semanal.to_csv(index=False).encode('utf-8-sig'),
+        file_name='reporte_nomina_semanal.csv',
+        mime='text/csv',
+        key='descarga_semanal'
     )
     st.markdown("---")
     st.subheader("✉️ Notificaciones Automáticas")
